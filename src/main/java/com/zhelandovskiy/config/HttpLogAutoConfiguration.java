@@ -12,8 +12,8 @@ import org.springframework.context.annotation.Configuration;
 public class HttpLogAutoConfiguration {
 
     @Bean
-    public LogAspect logAspect() {
-        return new LogAspect();
+    public LogAspect logAspect(HttpLogProperties httpLogProperties) {
+        return new LogAspect(httpLogProperties);
     }
 
 }

@@ -7,54 +7,62 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Aspect
-@Component
 public class LogAspect {
     private final Logger log = LoggerFactory.getLogger(LogAspect.class);
-    @Autowired
-    private HttpLogProperties httpLogProperties;
+    private final HttpLogProperties httpLogProperties;
 
-    @Around("@annotation(com.zhelandovskiy.annotation.HttpLog)")
-    public Object calculateTime(ProceedingJoinPoint joinPoint) throws Throwable {
+    public LogAspect(HttpLogProperties httpLogProperties) {
+        this.httpLogProperties = httpLogProperties;
+    }
 
-        if (httpLogProperties.isTimeMetric() && httpLogProperties.getLevel() == LogLevel.DEBUG) {
+    @Around("@annotation(com.zhelandovskiy.annotation.TimeMetric)")
+    public Object calculateTime(ProceedingJoinPoint joinPoint) {
+
+        if (httpLogProperties.isTimeMetric()) {
             Object proceed;
+            try {
+                long start = System.currentTimeMillis();
 
-            long start = System.currentTimeMillis();
-            proceed = joinPoint.proceed();
-            long end = System.currentTimeMillis();
+                proceed = joinPoint.proceed();
 
-            log.info("Time {}: {} ms", joinPoint.toShortString(), end - start);
+                long end = System.currentTimeMillis();
+
+                printLog(LogLevel.INFO, "Time {}: {} ms", joinPoint.toShortString(), end - start);
+            } catch (Throwable e) {
+                throw new RuntimeException(e);
+            }
 
             return proceed;
         }
 
-        return joinPoint.proceed();
+        try {
+            return joinPoint.proceed();
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Before("@annotation(com.zhelandovskiy.annotation.HttpLog)")
     public void logBefore(JoinPoint joinPoint) {
-        if (httpLogProperties.getLevel() == LogLevel.INFO || httpLogProperties.getLevel() == LogLevel.DEBUG)
-            log.info("Start method {}", joinPoint.toShortString());
+        printLog(LogLevel.DEBUG, "Start method {}", joinPoint.toShortString());
     }
 
     @After("@annotation(com.zhelandovskiy.annotation.HttpLog)")
     public void logAfter(JoinPoint joinPoint) {
-        if (httpLogProperties.getLevel() == LogLevel.INFO || httpLogProperties.getLevel() == LogLevel.DEBUG)
-            log.info("End method {}", joinPoint.toShortString());
+        printLog(LogLevel.DEBUG, "End method {}", joinPoint.toShortString());
     }
 
     @AfterReturning(
             value = "@annotation(com.zhelandovskiy.annotation.HttpLog)",
             returning = "result")
     public void calculateRecord(List<?> result) {
-        if (httpLogProperties.getLevel() == LogLevel.WARN && result.isEmpty())
-            log.info("Returning result is empty");
+        if (result.isEmpty())
+            printLog(LogLevel.WARN, "Returning result is empty");
+
     }
 
     @AfterThrowing(
@@ -62,7 +70,21 @@ public class LogAspect {
             throwing = "exception")
     public void exceptionsAdvice(Exception exception) {
         if (httpLogProperties.getLevel() == LogLevel.ERROR)
-            log.error("Getting exception: {}", exception.toString());
+            printLog(LogLevel.ERROR, "Getting exception: {}", exception.toString());
+    }
+
+    private void printLog(LogLevel level, String message, Object... args) {
+        if (checkLevel(level))
+            switch (level) {
+                case DEBUG -> log.debug(message, args);
+                case INFO -> log.info(message, args);
+                case WARN -> log.warn(message, args);
+                case ERROR -> log.error(message, args);
+            }
+    }
+
+    private boolean checkLevel(LogLevel level) {
+        return level.ordinal() >= httpLogProperties.getLevel().ordinal();
     }
 
 }

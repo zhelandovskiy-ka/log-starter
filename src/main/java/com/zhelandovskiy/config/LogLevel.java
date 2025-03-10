@@ -1,8 +1,8 @@
 package com.zhelandovskiy.config;
 
 public enum LogLevel {
-    INFO,
     DEBUG,
+    INFO,
     WARN,
     ERROR
 }
